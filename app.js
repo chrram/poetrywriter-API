@@ -12,6 +12,7 @@ const user = [
 const words = [
     {id: 1, userId:1, word: "test"},
     {id: 2, userId:1, word: "test2"},
+    {id: 3, userId:2, word: "test3"},
 ]
 
 const poetry = [
@@ -23,18 +24,33 @@ app.get('/',  (request, response) => {
 })
 
 app.get('/words', (request, response) => {  
-    response.send(words)
+    const savedWords = words.filter(word => word.userId == 1)
+    response.send(savedWords)
 })
 
-app.post('/words', (request, response) => {  
-    response.send(words)
+app.post('/words', (request, response) => {
+
+    words.push({id:2,userId:1, word:"pushedWord"})
+
+    const savedWords = words.filter(word => word.userId == 1)
+    response.send(savedWords)
+
+})
+
+app.delete('/words', (request, response) => {
+
+    const savedWords = words.filter(word => word.id != 1)
+    response.send(savedWords)
 })
 
 app.get('/poetry', (request, response) => {  
+    
     response.send(poetry)
 })
 
 app.post('/poetry', (request, response) => {  
+
+    poetry.push({id: 2, userId:1, poetry: "newpoetry"})
     response.send(poetry)
 })
 
