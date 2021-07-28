@@ -7,16 +7,14 @@ const mongoose = require('mongoose')
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
 
-const User = require('./model/user')
+const {User} = require('./model/schemas')
+const {Words} = require('./model/schemas')
 
 mongoose.connect(process.env.DATABASE_URL, { useNewUrlParser: true, useUnifiedTopology: true })
-//Get the default connection
+
 const db = mongoose.connection
 db.on('error', (error) => console.error(error, "Error connecting to the database."))
 db.once('open', () => console.log('Connected to Database!'))
-
-// //Bind connection to error event (to get notification of connection errors)
-// db.on('error', console.error.bind(console, 'MongoDB connection error:'));
 
 app.use(bodyParser.urlencoded({ extended: false }))
 
@@ -24,6 +22,31 @@ app.get('/', (request, response) => {
     console.log("Welcome to the API.")
     response.send("Welcome to the poetrywriter-API.")
 })
+
+// Token checking middleware
+// Code taken and modified from:
+// https://www.digitalocean.com/community/tutorials/nodejs-jwt-expressjs
+const authenticateToken = (request, response, next) => {
+
+    const authHeader = request.headers['authorization']
+    const token = authHeader && authHeader.split(' ')[1]
+    if (token == null) return response.sendStatus(401)
+    jwt.verify(token, "secret-string-of-some-sorts", (err, user) => {
+
+        if (err) return response.sendStatus(401)
+        request.user = user
+        next()
+    })
+}
+
+app.get('/user', authenticateToken, async (request, response) => {
+    let foundUser = await User.find({_id: request.user.sub})
+
+    let foundWords = await User.find({_id: request.user.sub}).populate("words")
+
+    console.log(foundUser, "foundUser", foundWords, "words")
+})
+
 
 app.post('/user', async (request, response) => {
 
@@ -77,22 +100,32 @@ app.post('/token', async (request, response) => {
                 response.status(400).json({ message: "WRONG USERNAME OR PASSWORD."});
             }
         })
-
     }
+})
+
+app.get('/words', authenticateToken, async (request, response) => {
+    const foundWords = await User.findOne({_id: request.user.sub}).populate("words", ["word"])
+    response.status(200).json(foundWords.words)
+})
+
+app.post('/words', authenticateToken, async (request, response) => {
+
+ 
+    const word = new Words({
+        word: request.body.word,
+    })
     
-})
+    try {
+        const savedWord = await word.save();
+        let foundUser = await User.findOne({_id: request.user.sub })
 
-app.get('/words', (request, response) => {
-    const savedWords = words.filter(word => word.userId == 1)
-    response.send(savedWords)
-})
-
-app.post('/words', (request, response) => {
-
-    words.push({ id: 2, userId: 1, word: "pushedWord" })
-
-    const savedWords = words.filter(word => word.userId == 1)
-    response.send(savedWords)
+        foundUser.words.push(savedWord._id);
+        const savedUser = await foundUser.save();
+        response.status(201).json(savedUser)
+        
+    } catch (error) {
+        response.status(400).json({ message: error.message })
+    }
 
 })
 
