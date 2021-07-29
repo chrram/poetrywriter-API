@@ -129,10 +129,23 @@ app.post('/words', authenticateToken, async (request, response) => {
 
 })
 
-app.delete('/words', (request, response) => {
+app.delete('/words',authenticateToken, async (request, response) => {
 
-    const savedWords = words.filter(word => word.id != 1)
-    response.send(savedWords)
+    const wordId = request.body.wordId || ""
+
+    try {
+        const foundUser = await User.findOne({_id: request.user.sub})
+        foundUser.words = foundUser.words.filter(ids => ids != wordId)
+        const newUserData = await foundUser.save()
+        
+        //Deletes the word in the collection for words. 
+        const wordToDelete = await Words.findByIdAndDelete(wordId)
+
+        response.status(200).json({ wordId })
+    } catch (error) {
+        response.status(400).json({ message: error.message })
+    }
+
 })
 
 app.get('/poetry', (request, response) => {
