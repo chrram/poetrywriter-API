@@ -1,4 +1,5 @@
 require('dotenv').config()
+const axios = require("axios")
 const express = require('express')
 const bodyParser = require('body-parser')
 const app = express()
@@ -7,8 +8,8 @@ const mongoose = require('mongoose')
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
 
-const {User} = require('./model/schemas')
-const {Words} = require('./model/schemas')
+const {User, Words, Poem} = require('./model/schemas')
+
 
 mongoose.connect(process.env.DATABASE_URL, { useNewUrlParser: true, useUnifiedTopology: true })
 
@@ -108,8 +109,20 @@ app.get('/words', authenticateToken, async (request, response) => {
     response.status(200).json(foundWords.words)
 })
 
-app.post('/words', authenticateToken, async (request, response) => {
+app.get('/rhymes', authenticateToken, async (request, response) => {
 
+    try{
+        axios.get("https://api.datamuse.com/words?rel_rhy=most")
+               .then(result => response.status(200).json(result.data))
+               .catch(error => response.send(error));
+     }
+     catch(err){
+        console.error(error);
+     }
+
+})
+
+app.post('/words', authenticateToken, async (request, response) => {
  
     const word = new Words({
         word: request.body.word,
@@ -136,10 +149,9 @@ app.delete('/words',authenticateToken, async (request, response) => {
     try {
         const foundUser = await User.findOne({_id: request.user.sub})
         foundUser.words = foundUser.words.filter(ids => ids != wordId)
-        const newUserData = await foundUser.save()
-        
+        await foundUser.save()
         //Deletes the word in the collection for words. 
-        const wordToDelete = await Words.findByIdAndDelete(wordId)
+        await Words.findByIdAndDelete(wordId)
 
         response.status(200).json({ wordId })
     } catch (error) {
@@ -148,15 +160,103 @@ app.delete('/words',authenticateToken, async (request, response) => {
 
 })
 
-app.get('/poetry', (request, response) => {
+app.get('/poetry', async (request, response) => {
 
-    response.send(poetry)
+    const allPoems = await Poem.find({}).populate("writtenBy", ["username"]);
+    response.status(200).json(allPoems)
 })
 
-app.post('/poetry', (request, response) => {
 
-    poetry.push({ id: 2, userId: 1, poetry: "newpoetry" })
-    response.send(poetry)
+app.get('/poetry/:id', async (request, response) => {
+    
+    const id = request.params.id
+    try{
+        const poem = await
+        Poem.findOne({_id: id})
+        .populate("writtenBy", ["username"])
+        .populate("likedBy", ["username"])
+        response.status(200).json({message: poem})
+    }
+    catch (error){
+        response.status(400).json({ message: error.message })
+    }
+})
+
+
+app.post('/poetry/like/:id', authenticateToken, async (request, response) => {
+
+    const id = request.params.id
+    try{
+        const poem = await Poem.findOne({_id: id})
+
+        //If the user is trying to like his own poems.
+        if(poem.writtenBy == request.user.sub){
+            throw {message: "You cannot like your own poems."}
+        }
+
+        // if the user has already liked this poem.
+        if (poem.likedBy.find(userId => userId == request.user.sub)){
+            throw{message: "You have already liked this poem."}
+        }
+
+        poem.likedBy.push(request.user.sub)
+        const likedPoem = await poem.save();
+        response.status(201).json(likedPoem)
+    }
+    catch (error){
+        response.status(400).json({ message: error.message })
+    }
+
+})
+
+app.delete('/poetry/like/:id', authenticateToken, async (request, response) => {
+
+    const id = request.params.id
+
+    try{
+        const poem = await Poem.findOne({_id: id})
+
+        //If the user is trying to like his own poems.
+        if(poem.writtenBy == request.user.sub){
+            throw {message: "You cannot like your own poems."}
+        }
+
+        // if the user has already liked this poem.
+        if (!poem.likedBy.find(userId => userId == request.user.sub)){
+            throw{message: "You have not liked this poem."}
+        }
+
+        poem.likedBy = poem.likedBy.filter(userId => userId != request.user.sub)
+     
+        const deletedLike = await poem.save()
+        response.status(201).json(deletedLike)
+    }
+    catch (error){
+        response.status(400).json({ message: error.message })
+    }
+    // Todo : Implement the removal of a like of a poem.
+})
+
+app.post('/poetry', authenticateToken, async (request, response) => {
+
+    const newPoem = new Poem({
+        title: "Title here",
+        text: "Text goes here",
+        writtenBy: request.user.sub
+    })
+
+    try {
+        const savedPoem = await newPoem.save();
+        let foundUser = await User.findOne({_id: request.user.sub })
+
+        foundUser.poems.push(savedPoem._id);
+        const savedUser = await foundUser.save();
+        response.status(201).json({user: savedUser, poem: savedPoem})
+        
+    } catch (error) {
+        response.status(400).json({ message: error.message })
+    }
+
 })
 
 app.listen(8080)
