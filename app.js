@@ -8,7 +8,7 @@ const mongoose = require('mongoose')
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
 
-const {User, Words, Poem} = require('./model/schemas')
+const {User, Words, Poem} = require('./models/schemas')
 
 
 mongoose.connect(process.env.DATABASE_URL, { useNewUrlParser: true, useUnifiedTopology: true })
@@ -182,6 +182,29 @@ app.get('/poetry/:id', async (request, response) => {
     }
 })
 
+app.delete('/poetry/:id',authenticateToken, async (request, response) => {
+    
+    const id = request.params.id
+    try{
+
+        // This can maybe be rewritten with findOneDelete later on.
+        const foundUser = await User.findOne({_id: request.user.sub})
+        .populate({ path:"poems", match: {_id: id, writtenBy: request.user.sub}})
+       
+        // // Deletes the poem in the users poem array.
+        foundUser.poems = foundUser.poems.filter(poemIds => poemIds._id != id)
+        
+        await foundUser.save()
+        //Deletes the poem in the collection for poems. 
+        await Poem.findByIdAndDelete(id)
+
+        response.status(200).json({ foundUser })
+
+    }
+    catch (error){
+        response.status(400).json({ message: error.message })
+    }
+})
 
 app.post('/poetry/like/:id', authenticateToken, async (request, response) => {
 
@@ -234,7 +257,6 @@ app.delete('/poetry/like/:id', authenticateToken, async (request, response) => {
     catch (error){
         response.status(400).json({ message: error.message })
     }
-    // Todo : Implement the removal of a like of a poem.
 })
 
 app.post('/poetry', authenticateToken, async (request, response) => {
