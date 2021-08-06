@@ -103,12 +103,6 @@ app.post('/token', async (request, response) => {
     }
 })
 
-
-
-app.get('/rhymes', async (request, response) => {
-
-})
-
 app.get('/words', authenticateToken, async (request, response) => {
     const foundWords = await User.findOne({ _id: request.user.sub }).populate("words", ["word"])
     response.status(200).json(foundWords.words)
@@ -124,6 +118,7 @@ app.post('/words', authenticateToken, async (request, response) => {
         axios.get(`https://api.datamuse.com/words?rel_rhy=${request.body.word}`)
             .then(async result => {
 
+                // Puts the rhyming words in the array.
                 for (const property in result.data) {
                     word.rhyme.push(result.data[property].word)
                 }
@@ -131,11 +126,9 @@ app.post('/words', authenticateToken, async (request, response) => {
                 const savedWord = await word.save();
                 let foundUser = await User.findOne({ _id: request.user.sub })
 
-                // console.log(foundUser, word, "testttt")
                 foundUser.words.push(savedWord._id);
                 const savedUser = await foundUser.save();
                 response.status(201).json(savedUser)
-
 
             })
             .catch(error => response.send(error));
@@ -169,6 +162,7 @@ app.get('/poetry', async (request, response) => {
     const allPoems = await Poem.find({}).populate("writtenBy", ["username"]).populate("comments");
     response.status(200).json(allPoems)
 })
+
 app.post('/poetry', authenticateToken, async (request, response) => {
 
     const newPoem = new Poem({
@@ -238,8 +232,6 @@ app.delete('/poetry/comment', authenticateToken, async (request, response) => {
     }
 })
 
-
-
 app.get('/poetry/:id', async (request, response) => {
 
     const id = request.params.id
@@ -254,7 +246,6 @@ app.get('/poetry/:id', async (request, response) => {
         response.status(400).json({ message: error.message })
     }
 })
-
 
 
 app.post('/poetry/like/:id', authenticateToken, async (request, response) => {
@@ -315,17 +306,21 @@ app.delete('/poetry/:id', authenticateToken, async (request, response) => {
 
     //todo: delete all the comments associated with this poem.
     // deletemany
-
     const id = request.params.id
-    try {
+    try {        
 
         // This can maybe be rewritten with findOneDelete later on.
         const foundUser = await User.findOne({ _id: request.user.sub })
             .populate({ path: "poems", match: { _id: id, writtenBy: request.user.sub } })
 
-        // // Deletes the poem in the users poem array.
-        foundUser.poems = foundUser.poems.filter(poemIds => poemIds._id != id)
+        if (!foundUser) throw {messsage: "The user was not found or you don't have permission to delete it."}
 
+        // console.log(foundUser.poems[0].comments, " log comments ")
+        await Comment.deleteMany({_id:{$in:foundUser.poems[0].comments}})
+
+        // // // Deletes the poem in the users poem array.
+        foundUser.poems = foundUser.poems.filter(poemIds => poemIds._id != id)
+        
         await foundUser.save()
         //Deletes the poem in the collection for poems. 
         await Poem.findByIdAndDelete(id)
