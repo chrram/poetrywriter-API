@@ -184,6 +184,34 @@ app.post('/poetry', authenticateToken, async (request, response) => {
     }
 })
 
+app.patch('/poetry/:id', authenticateToken, async (request, response) => {
+
+    // todo: edit a your poetry
+    const {title, text} = request.body
+    const {id} = request.params
+
+    try {
+
+        let updateValues = {}
+        if(title) updateValues['title'] = title
+        if(text) updateValues['text'] = text
+
+
+        if(Object.keys(updateValues).length === 0 && updateValues.constructor === Object) throw {message: "You must update either the title or the text of the poem."}
+        const updatedPoem = await Poem.updateOne(
+            { _id: id, writtenBy: request.user.sub },
+            { $set: updateValues }
+          );
+
+        if(!updatedPoem.nModified) throw {message: "The poem was not found."}
+
+        response.status(200).json(updatedPoem)
+    } catch (error) {
+        response.status(400).json({ message: error.message })
+    }
+})
+
+
 app.post('/poetry/comment', authenticateToken, async (request, response) => {
 
     const { id } = request.body
