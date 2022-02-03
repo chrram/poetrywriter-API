@@ -2,7 +2,7 @@ require('dotenv').config()
 const axios = require("axios")
 const express = require('express')
 const bodyParser = require('body-parser')
-const { ApolloServer, gql } = require('apollo-server-express');
+const { ApolloServer } = require('apollo-server-express');
 
 const mongoose = require('mongoose')
 
@@ -10,6 +10,8 @@ const cors = require('cors')
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
 
+const typeDefs = require('./models/typedefs')
+const resolvers = require('./models/resolvers')
 const { User, Words, Poem, Comment } = require('./models/schemas')
 
 mongoose.connect(process.env.DATABASE_URL, { useNewUrlParser: true, useUnifiedTopology: true })
@@ -29,46 +31,6 @@ app.get('/', (request, response) => {
     response.send("Welcome to the poetrywriter-API.")
 })
 
-const typeDefs = gql`
-
-    type Query {
-       hello: String!
-       users: [User]
-       user(id: ID!): User
-
-       poem(id: ID!): Poem
-   }
-
-   type User {
-       id: ID,
-       username: String,
-       password: String
-   }
-
-   type Poem {
-       id: ID,
-       title: String!,
-       text: String!,
-       writtenBy: User
-       likedBy: [User]
-   }
-
-`;
-
-const resolvers = {
-    Query: {
-        hello: () => 'Hello world',
-        user: async ( parent, args ) => {
-            return await User.findById(args.id)
-        },
-        users: async () => {
-            return await User.find({})
-        },
-        poem: async (parent, args) => {
-            return await Poem.findById(args.id).populate("writtenBy")
-        }
-    }
-}
 
 const server = new ApolloServer({ typeDefs, resolvers })
 
