@@ -2,9 +2,11 @@ require('dotenv').config()
 const axios = require("axios")
 const express = require('express')
 const bodyParser = require('body-parser')
-const app = express()
+const { ApolloServer, gql } = require('apollo-server-express');
+
 const mongoose = require('mongoose')
 
+const cors = require('cors')
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken')
 
@@ -12,16 +14,63 @@ const { User, Words, Poem, Comment } = require('./models/schemas')
 
 mongoose.connect(process.env.DATABASE_URL, { useNewUrlParser: true, useUnifiedTopology: true })
 
+const app = express()
 const db = mongoose.connection
 db.on('error', (error) => console.error(error, "Error connecting to the database."))
 db.once('open', () => console.log('Connected to Database!'))
 
 app.use(bodyParser.urlencoded({ extended: false }))
+app.use(cors({
+    origin: '*',
+}));
 
 app.get('/', (request, response) => {
     console.log("Welcome to the API.")
     response.send("Welcome to the poetrywriter-API.")
 })
+
+const typeDefs = gql`
+
+    type Query {
+       hello: String!
+       users: [User]
+       user(id: ID!): User
+
+       poem(id: ID!): Poem
+   }
+
+   type User {
+       id: ID,
+       username: String,
+       password: String
+   }
+
+   type Poem {
+       id: ID,
+       title: String!,
+       text: String!,
+       writtenBy: User
+       likedBy: [User]
+   }
+
+`;
+
+const resolvers = {
+    Query: {
+        hello: () => 'Hello world',
+        user: async ( parent, args ) => {
+            return await User.findById(args.id)
+        },
+        users: async () => {
+            return await User.find({})
+        },
+        poem: async (parent, args) => {
+            return await Poem.findById(args.id).populate("writtenBy")
+        }
+    }
+}
+
+const server = new ApolloServer({ typeDefs, resolvers })
 
 // Token checking middleware
 // Code taken and modified from:
@@ -29,6 +78,7 @@ app.get('/', (request, response) => {
 const authenticateToken = (request, response, next) => {
 
     const authHeader = request.headers['authorization']
+
     const token = authHeader && authHeader.split(' ')[1]
     if (token == null) return response.sendStatus(401)
     jwt.verify(token, "secret-string-of-some-sorts", (err, user) => {
@@ -74,11 +124,12 @@ app.post('/user', async (request, response) => {
 
 app.post('/token', async (request, response) => {
 
-    let foundUser = await User.find({ username: request.body.username.toString() })
+    let foundUser = await User.find({ username: request.body.username })
 
     if (foundUser.length == 0)
         response.status(400).json({ message: "WRONG USERNAME OR PASSWORD." });
     else {
+
 
         bcrypt.compare(request.body.password, foundUser[0].password, (error, result) => {
             if (result) {
@@ -122,7 +173,7 @@ app.post('/words', authenticateToken, async (request, response) => {
                 for (const property in result.data) {
                     word.rhyme.push(result.data[property].word)
                 }
-                
+
                 const savedWord = await word.save();
                 let foundUser = await User.findOne({ _id: request.user.sub })
 
@@ -142,6 +193,7 @@ app.post('/words', authenticateToken, async (request, response) => {
 app.delete('/words', authenticateToken, async (request, response) => {
 
     const wordId = request.body.wordId || ""
+    console.log(request.body, "body wordId here")
 
     try {
         const foundUser = await User.findOne({ _id: request.user.sub })
@@ -152,6 +204,8 @@ app.delete('/words', authenticateToken, async (request, response) => {
 
         response.status(200).json({ wordId })
     } catch (error) {
+
+        console.log("we are here")
         response.status(400).json({ message: error.message })
     }
 
@@ -186,24 +240,24 @@ app.post('/poetry', authenticateToken, async (request, response) => {
 
 app.patch('/poetry/:id', authenticateToken, async (request, response) => {
 
-    // todo: edit a your poetry
-    const {title, text} = request.body
-    const {id} = request.params
+    const { title, text } = request.body
+    const { id } = request.params
 
     try {
 
         let updateValues = {}
-        if(title) updateValues['title'] = title
-        if(text) updateValues['text'] = text
+        if (title) updateValues['title'] = title
+        if (text) updateValues['text'] = text
 
+        if (Object.keys(updateValues).length === 0 && updateValues.constructor === Object)
+            throw { message: "You must update either the title or the text of the poem." }
 
-        if(Object.keys(updateValues).length === 0 && updateValues.constructor === Object) throw {message: "You must update either the title or the text of the poem."}
         const updatedPoem = await Poem.updateOne(
             { _id: id, writtenBy: request.user.sub },
             { $set: updateValues }
-          );
+        );
 
-        if(!updatedPoem.nModified) throw {message: "The poem was not found."}
+        if (!updatedPoem.nModified) throw { message: "The poem was not found." }
 
         response.status(200).json(updatedPoem)
     } catch (error) {
@@ -214,12 +268,10 @@ app.patch('/poetry/:id', authenticateToken, async (request, response) => {
 
 app.post('/poetry/comment', authenticateToken, async (request, response) => {
 
-    const { id } = request.body
-
-    console.log("buuuguuuuug")
+    const { id, userComment } = request.body
 
     const newComment = new Comment({
-        text: "Text goes here 2",
+        text: userComment,
         commentOn: id,
         writtenBy: request.user.sub
     })
@@ -303,8 +355,6 @@ app.post('/poetry/like/:id', authenticateToken, async (request, response) => {
 
 app.delete('/poetry/like/:id', authenticateToken, async (request, response) => {
 
-    console.log("rtetetteestet")
-
     const id = request.params.id
 
     try {
@@ -335,20 +385,19 @@ app.delete('/poetry/:id', authenticateToken, async (request, response) => {
     //todo: delete all the comments associated with this poem.
     // deletemany
     const id = request.params.id
-    try {        
+    try {
 
         // This can maybe be rewritten with findOneDelete later on.
         const foundUser = await User.findOne({ _id: request.user.sub })
             .populate({ path: "poems", match: { _id: id, writtenBy: request.user.sub } })
 
-        if (!foundUser) throw {messsage: "The user was not found or you don't have permission to delete it."}
+        if (!foundUser) throw { messsage: "The user was not found or you don't have permission to delete it." }
 
-        // console.log(foundUser.poems[0].comments, " log comments ")
-        await Comment.deleteMany({_id:{$in:foundUser.poems[0].comments}})
+        await Comment.deleteMany({ _id: { $in: foundUser.poems[0].comments } })
 
-        // // // Deletes the poem in the users poem array.
+        // Deletes the poem in the users poem array.
         foundUser.poems = foundUser.poems.filter(poemIds => poemIds._id != id)
-        
+
         await foundUser.save()
         //Deletes the poem in the collection for poems. 
         await Poem.findByIdAndDelete(id)
@@ -363,4 +412,9 @@ app.delete('/poetry/:id', authenticateToken, async (request, response) => {
 
 
 
-app.listen(8080)
+server.start().then(res => {
+    server.applyMiddleware({ app, path: '/graphql' });
+    app.listen(8080, () =>
+        console.log(`Gateway API running at port: ${8080}`)
+    );
+})
