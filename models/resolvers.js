@@ -6,7 +6,6 @@ const jwt = require('jsonwebtoken')
 
 module.exports = {
     Query: {
-        hello: () => 'Hello world',
         user: async (parent, args) => {
             return await User.findById(args.id)
         },
@@ -16,15 +15,24 @@ module.exports = {
         poem: async (parent, args) => {
             return await Poem.findById(args.id).populate("writtenBy")
         }
+        // getUserWords: async (parent, {id}) => {
+        //     return await Words.findById()
+        // }
+
     },
     Mutation: {
-        newUser: async (parent, args) => {
+        newUser: async (parent, {username, password}) => {
 
-
+            const hashedPassword = await new Promise((resolve, reject) => {
+                bcrypt.hash(password, 10, function (error, hash) {
+                    if (error) reject(error)
+                    resolve(hash)
+                });
+            })
 
             return await User.create({
-                username: args.username,
-                password: args.password
+                username: username,
+                password: hashedPassword
             })
 
         },
@@ -54,6 +62,32 @@ module.exports = {
             }, "secret-string-of-some-sorts")
 
             return accessToken
+        },
+
+        newPoem: async (parent, {title, text}, {user}) => {
+
+            if(!user) {
+                throw new AuthenticationError("You must be signed in")
+            }
+
+            const newPoem = await Poem.create({
+                title: title,
+                text: text,
+                writtenBy: user.sub
+            })
+
+            try {
+                let foundUser = await User.findOne({ _id: user.sub })
+                foundUser.poems.push(newPoem._id);
+                const savedUser = await foundUser.save();
+                
+                return newPoem
+
+            } catch ( error ) {
+                throw new Error("Internal server error " + error)
+            }
+            
         }
+
     }
 }

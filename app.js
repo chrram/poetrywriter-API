@@ -31,8 +31,25 @@ app.get('/', (request, response) => {
     response.send("Welcome to the poetrywriter-API.")
 })
 
+const getUser = token => {
+    if (token) {
+        try{
+            return jwt.verify(token, "secret-string-of-some-sorts")
+        } catch (error) {
+            throw new Error("Session invalid" + error)
+        }
+    }
+}
 
-const server = new ApolloServer({ typeDefs, resolvers })
+const server = new ApolloServer({ typeDefs, resolvers, context: ({ req }) => {
+        const token = req.headers.authorization
+        
+        const user = getUser(token)
+        console.log(user, "user should be here")
+
+        return { user }
+    } 
+})
 
 // Token checking middleware
 // Code taken and modified from:
