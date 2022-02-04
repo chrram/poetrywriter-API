@@ -2,12 +2,13 @@ const { User, Words, Poem, Comment } = require('./schemas')
 const { AuthenticationError } = require('apollo-server-express');
 
 const bcrypt = require('bcrypt')
-const jwt = require('jsonwebtoken')
+const jwt = require('jsonwebtoken');
+const { Types } = require('mongoose');
 
 module.exports = {
     Query: {
         user: async (parent, args) => {
-            return await User.findById(args.id)
+            return await User.findById(args.id).populate("poems")
         },
         users: async () => {
             return await User.find({})
@@ -15,13 +16,9 @@ module.exports = {
         poem: async (parent, args) => {
             return await Poem.findById(args.id).populate("writtenBy")
         }
-        // getUserWords: async (parent, {id}) => {
-        //     return await Words.findById()
-        // }
-
     },
     Mutation: {
-        newUser: async (parent, {username, password}) => {
+        newUser: async (parent, { username, password }) => {
 
             const hashedPassword = await new Promise((resolve, reject) => {
                 bcrypt.hash(password, 10, function (error, hash) {
@@ -64,9 +61,9 @@ module.exports = {
             return accessToken
         },
 
-        newPoem: async (parent, {title, text}, {user}) => {
+        newPoem: async (parent, { title, text }, { user }) => {
 
-            if(!user) {
+            if (!user) {
                 throw new AuthenticationError("You must be signed in")
             }
 
@@ -76,17 +73,18 @@ module.exports = {
                 writtenBy: user.sub
             })
 
-            try {
-                let foundUser = await User.findOne({ _id: user.sub })
-                foundUser.poems.push(newPoem._id);
-                const savedUser = await foundUser.save();
-                
-                return newPoem
+            const updatedUser = await User.findByIdAndUpdate(user.sub,
+                {
+                    $push: {
+                        poems: Types.ObjectId(newPoem._id)
+                    }
+                },
+                {
+                    new: true
+                }
+            ).populate("poems")
 
-            } catch ( error ) {
-                throw new Error("Internal server error " + error)
-            }
-            
+            return updatedUser
         }
 
     }
