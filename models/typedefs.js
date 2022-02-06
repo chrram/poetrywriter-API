@@ -10,23 +10,29 @@ module.exports = gql`
 
    type User {
        id: ID,
-       username: String,
-       password: String
+       username: String
        poems: [Poem]
    }
 
    type Poem {
-       id: ID,
-       title: String!,
-       text: String!,
+       id: ID
+       title: String!
+       text: String!
        writtenBy: User!
        likedBy: [User]
    }
 
+   input userInfo {
+       username: String!
+       password: String!
+   }
+
    type Mutation {
        newUser(username: String!, password: String!): User!
-       signIn(username: String!, password: String!): String!
+       signIn(input: userInfo!): String!
+       
        newPoem(title: String!, text: String!): User!
+       deletePoem(id: ID): User!
    }
 
 `;

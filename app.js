@@ -31,26 +31,6 @@ app.get('/', (request, response) => {
     response.send("Welcome to the poetrywriter-API.")
 })
 
-const getUser = token => {
-    if (token) {
-        try{
-            return jwt.verify(token, "secret-string-of-some-sorts")
-        } catch (error) {
-            throw new Error("Session invalid" + error)
-        }
-    }
-}
-
-const server = new ApolloServer({ typeDefs, resolvers, context: ({ req }) => {
-        const token = req.headers.authorization
-        
-        const user = getUser(token)
-        console.log(user, "user should be here")
-
-        return { user }
-    } 
-})
-
 // Token checking middleware
 // Code taken and modified from:
 // https://www.digitalocean.com/community/tutorials/nodejs-jwt-expressjs
@@ -272,7 +252,6 @@ app.post('/poetry/comment', authenticateToken, async (request, response) => {
 app.delete('/poetry/comment', authenticateToken, async (request, response) => {
     const { id } = request.body
 
-    console.log(request.user.sub, id, "test")
     try {
 
         const deletedComment = await Comment.findOneAndDelete({ _id: id, writtenBy: request.user.sub })
@@ -390,9 +369,28 @@ app.delete('/poetry/:id', authenticateToken, async (request, response) => {
 })
 
 
+// GRAPH QL
+const getUser = token => {
+    if (token) {
+        try{
+            return jwt.verify(token, "secret-string-of-some-sorts")
+        } catch (error) {
+            throw new Error("Session invalid" + error)
+        }
+    }
+}
+
+const server = new ApolloServer({ typeDefs, resolvers, context: ({ req }) => {
+        const token = req.headers.authorization
+        const user = getUser(token)
+        return { user }
+    } 
+})
 
 server.start().then(res => {
+
     server.applyMiddleware({ app, path: '/graphql' });
+
     app.listen(8080, () =>
         console.log(`Gateway API running at port: ${8080}`)
     );

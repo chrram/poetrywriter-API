@@ -13,7 +13,7 @@ const user = new mongoose.Schema(
 const word = new mongoose.Schema(
 	{
 		word: { type: String, required: true},
-		rhyme: [{type:String}]
+		rhyme: [{type: String}]
 	},
 	{ collection: 'saved_words' }
 )

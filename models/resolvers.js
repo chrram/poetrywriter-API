@@ -34,15 +34,17 @@ module.exports = {
 
         },
 
-        signIn: async (parent, { username, password }) => {
-            const user = await User.findOne({ username: username })
+        signIn: async (parent, { input }) => {
+
+
+            const user = await User.findOne({ username: input.username })
 
             if (!user) {
                 console.log(" User not found ")
                 throw new AuthenticationError("Error signing in")
             }
 
-            const valid = await bcrypt.compare(password, user.password)
+            const valid = await bcrypt.compare(input.password, user.password)
 
             if (!valid) {
                 console.log("User found but PASSWORD NOT VALID")
@@ -85,7 +87,16 @@ module.exports = {
             ).populate("poems")
 
             return updatedUser
-        }
+        },
 
+        deletePoem: async (parent, { id }, { user }) => {
+            
+            if (!user) {
+                throw new AuthenticationError("You must be signed in")
+            }
+            
+
+            
+        }
     }
 }
