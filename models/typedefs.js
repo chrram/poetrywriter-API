@@ -6,6 +6,7 @@ module.exports = gql`
        users: [User]
        user(id: ID!): User
        poem(id: ID!): Poem!
+       poems: [Poem]!
    }
 
    type User {
@@ -34,5 +35,10 @@ module.exports = gql`
        newPoem(title: String!, text: String!): User!
        deletePoem(id: ID): User!
    }
+
+   type Subscription {
+        newPoemPosted: Poem
+    }
+
 
 `;

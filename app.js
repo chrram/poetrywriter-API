@@ -2,7 +2,12 @@ require('dotenv').config()
 const axios = require("axios")
 const express = require('express')
 const bodyParser = require('body-parser')
+
+const  {createServer} = require('http');
 const { ApolloServer } = require('apollo-server-express');
+const { execute, subscribe } = require("graphql");
+const { SubscriptionServer } = require("subscriptions-transport-ws");
+const { makeExecutableSchema } = require("@graphql-tools/schema");
 
 const mongoose = require('mongoose')
 
@@ -372,7 +377,7 @@ app.delete('/poetry/:id', authenticateToken, async (request, response) => {
 // GRAPH QL
 const getUser = token => {
     if (token) {
-        try{
+        try {
             return jwt.verify(token, "secret-string-of-some-sorts")
         } catch (error) {
             throw new Error("Session invalid" + error)
@@ -380,18 +385,47 @@ const getUser = token => {
     }
 }
 
-const server = new ApolloServer({ typeDefs, resolvers, context: ({ req }) => {
+
+const schema = makeExecutableSchema({ typeDefs, resolvers });
+const httpServer = createServer(app);
+
+const server = new ApolloServer({
+    schema, context: ({ req }) => {
         const token = req.headers.authorization
         const user = getUser(token)
         return { user }
-    } 
+    },
+    plugins: [{
+        async serverWillStart() {
+
+            return {
+                async drainServer() {
+                    subscriptionServer.close();
+                }
+            };
+
+        }
+    }]
 })
 
-server.start().then(res => {
 
-    server.applyMiddleware({ app, path: '/graphql' });
+server.start().then(result => {
 
-    app.listen(8080, () =>
+    server.applyMiddleware({ app })
+
+    SubscriptionServer.create(
+        {
+            schema, execute, subscribe,
+            async onConnect(connectionParams) {
+                console.log('Connected to subscription!')
+            },
+        },
+    
+        { server: httpServer, path: server.graphqlPath }
+    )
+
+    httpServer.listen(8080, () =>
         console.log(`Gateway API running at port: ${8080}`)
     );
+
 })

@@ -1,9 +1,14 @@
 const { User, Words, Poem, Comment } = require('./schemas')
 const { AuthenticationError } = require('apollo-server-express');
 
+const { PubSub } = require('graphql-subscriptions')
+const pubsub = new PubSub();
+
 const bcrypt = require('bcrypt')
 const jwt = require('jsonwebtoken');
 const { Types } = require('mongoose');
+
+const POEM_ADDED = 'POEM_ADDED'
 
 module.exports = {
     Query: {
@@ -15,7 +20,8 @@ module.exports = {
         },
         poem: async (parent, args) => {
             return await Poem.findById(args.id).populate("writtenBy")
-        }
+        },
+        poems: async (parent, args) => await Poem.find({}).populate("writtenBy")
     },
     Mutation: {
         newUser: async (parent, { username, password }) => {
@@ -35,8 +41,7 @@ module.exports = {
         },
 
         signIn: async (parent, { input }) => {
-
-
+            
             const user = await User.findOne({ username: input.username })
 
             if (!user) {
@@ -85,18 +90,25 @@ module.exports = {
                     new: true
                 }
             ).populate("poems")
+ 
+            pubsub.publish("POEM_ADDED", {newPoemPosted: newPoem})
 
             return updatedUser
         },
 
         deletePoem: async (parent, { id }, { user }) => {
-            
+
             if (!user) {
                 throw new AuthenticationError("You must be signed in")
             }
-            
 
-            
         }
-    }
+    },
+
+    Subscription: {
+        newPoemPosted: {
+            subscribe: () => pubsub.asyncIterator(["POEM_ADDED"])
+        },
+    },
+
 }
